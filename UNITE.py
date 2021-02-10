@@ -9,13 +9,12 @@ import matplotlib.pyplot as plt
 import numpy as np
 import copy
 from torch.utils.data import DataLoader, Dataset
-from data_loader import fetch_dataloaders_nash, \
-    fetch_dataloaders_debug, fetch_dataloaders_nash_all_features,\
-    fetch_dataloaders_ALZ_all_features, fetch_dataloaders_debug_nash
+from data_loader import fetch_dataloaders_debug, fetch_dataloaders_nash_all_features,\
+    fetch_dataloaders_ALZ_all_features
 from config import DIC_VGP_CONF
 from evaluation import eval
 from config import DIC_CTRANSFORMER_CONF, DIC_STN_CONF
-from model.baseline import CTransformer_embed, STN_embed
+from baseline import CTransformer_embed, STN_embed
 from sklearn.cluster import SpectralBiclustering
 
 factor = 1e-1
@@ -225,16 +224,60 @@ class SparseGP(nn.Module):
         return sample_mean, var_mean
 
 
-
-
-
 if __name__ == '__main__':
 
     dataset = 'alz_debug'  ## nash, nash_debug
 
     dic_model_conf = DIC_CTRANSFORMER_CONF
 
-    if dataset == 'nash':
+    if dataset == 'mnist':
+        args = {
+            'batch_size': 128,
+            'test_batch_size': 128
+        }
+        train_loader = torch.utils.data.DataLoader(
+            datasets.MNIST('./', train=True, download=True,
+                           transform=transforms.ToTensor()),
+            batch_size=args['batch_size'], shuffle=True)
+        test_loader = torch.utils.data.DataLoader(
+            datasets.MNIST('./', train=False, transform=transforms.ToTensor()),
+            batch_size=args['test_batch_size'], shuffle=True)
+        args = {
+            'input_dim': 784,
+            'z_dim': 16,
+            'hidden_dim': 256,
+            'batch_size': 128,
+            'test_batch_size': 128,
+            'n_induce': 128,
+            'parameterize_kernel': False,
+            'n_class': 10,
+            'cuda': True,
+            'lr': 1e-3,
+            'num_epochs': 5,
+            'test_frequency': 80,
+        }
+    elif dataset == 'alz_debug':
+        vocab_size = 3767  # 14976 for nash debug # 14464  #14976 3767 for ALZ debug
+        my_dic_model_conf = DIC_VGP_CONF
+        args = {
+            'input_dim': 200,
+            'z_dim': 2,
+            'hidden_dim': 8,
+            'batch_size': 200,
+            'test_batch_size': 200,
+            'n_induce': 20,
+            'parameterize_kernel': False,
+            'n_class': 2,
+            'cuda': False,
+            'lr': 1e-3,
+            'num_epochs': 1000,
+            'test_frequency': 80,
+        }
+        dataloaders = fetch_dataloaders_debug(['train', 'test', 'val'], batch_size=args['batch_size'])
+        val_loader = dataloaders['val']
+        train_loader = dataloaders['train']
+        test_loader = dataloaders['test']
+    elif dataset == 'nash_all':
         vocab_size = 26706
         my_dic_model_conf = DIC_STN_CONF
         my_dic_model_conf['vocab_size'] = 24285
@@ -245,7 +288,6 @@ if __name__ == '__main__':
             'z_dim': 16,  ##16
             'hidden_dim': 32,
             'batch_size': 256,
-            # 'test_batch_size': 10000,
             'n_induce': 200,
             'parameterize_kernel': False,
             'n_class': 2,
@@ -258,7 +300,7 @@ if __name__ == '__main__':
         train_loader = dataloaders['train']
         test_loader = dataloaders['test']
         val_loader = dataloaders['val']
-    elif dataset == 'ALZ':
+    elif dataset == 'ALZ_all':
         vocab_size = 30692
         my_dic_model_conf = DIC_STN_CONF
         my_dic_model_conf['vocab_size'] = 30692
@@ -291,13 +333,15 @@ if __name__ == '__main__':
     print("selected device", device)
 
 
-    if dataset == 'nash':
+    if 'debug' in dataset:
+        embed_fn = LSTM_embed(args['input_dim'], args['z_dim'], args['hidden_dim'], vocab_size, device)
+    elif dataset == 'nash_all':
         embed_fn = STN_embed(my_dic_model_conf, device)
         model_path = './experiments/0905_nash/stn.pth'
         # model = STN_embed(my_dic_model_conf, device)
         cpt = torch.load(model_path, map_location=torch.device('cuda'))
         embed_fn.load_state_dict(cpt['state_dict'])
-    elif dataset == 'ALZ':
+    elif dataset == 'ALZ_all':
         embed_fn = STN_embed(my_dic_model_conf, device)
         model_path = './experiments/0905_alz-rxdx/stn.pth'
         cpt = torch.load(model_path, map_location=torch.device('cuda'))
@@ -310,10 +354,8 @@ if __name__ == '__main__':
 
     sgp = SparseGP(args['input_dim'], args['z_dim'], args['hidden_dim'], args['n_induce'],
                    parameterize=args['parameterize_kernel'], n_class=args['n_class'], encoder=embed_fn)
-
     if args['cuda']:
         sgp = sgp.to('cuda')
-
     optimizer = Adam(sgp.parameters(), lr=args['lr'])
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, len(train_loader) / 2, .8)
 
@@ -381,7 +423,6 @@ if __name__ == '__main__':
             pred_list = np.array(pred_list)
             pred_prob_list = np.array(pred_prob_list)
 
-            # normalizer_test = len(test_loader.dataset)
             accuracy, precision, recall, mcc, f1, kappa, roc_auc, pr_auc, conf_matrix = eval(y_list, pred_list,
                                                                                              pred_prob_list)
             if f1 > best_f1:
@@ -389,12 +430,6 @@ if __name__ == '__main__':
                 best_model = copy.deepcopy(sgp.state_dict())
                 print("Found new best f1 at {}".format(epoch))
             if epoch % 20 == 0:
-                torch.save(best_model, './experiments/debug.pth')
-            # print('roc_auc', roc_auc)
-            # print('pr_auc', pr_auc)
-            # print('kappa', kappa)
-            # print("[epoch %03d]  average test loss: %.4f" % (epoch, total_epoch_loss_test))
-            # print(f'test acc: {float(hit) / normalizer_test}')
-            # total_epoch_loss_test = test_loss / normalizer_test
+                torch.save(best_model, './experiments/0909_alz_debug.pth')
 
-    torch.save(best_model, './experiments/debug.pth')
+    torch.save(best_model, './experiments/0909_alz_debug.pth')

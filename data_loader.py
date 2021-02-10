@@ -1,11 +1,7 @@
 import os
 import pandas as pd
 from torch.utils.data import Dataset, DataLoader
-# from keras.preprocessing.text import Tokenizer
-# from keras.preprocessing.sequence import pad_sequences
-# from keras.utils import to_categorical
 import numpy as np
-# from keras.utils import to_categorical
 import torch
 from pyro.infer import MCMC, NUTS, Predictive, SVI, TraceMeanField_ELBO
 
@@ -103,8 +99,7 @@ def fetch_dataloaders_nash_all_features(splits, batch_size=1):
     """
     Args:
         splits (list): A list of strings containing train/val/test.
-        var_str (string): A variable in log.
-        data_dir (string): Path to the dataset.
+        batch size
     """
     dataloaders = {}
     for split in splits:
@@ -118,8 +113,7 @@ def fetch_dataloaders_ALZ_all_features(splits, batch_size=1):
     """
     Args:
         splits (list): A list of strings containing train/val/test.
-        var_str (string): A variable in log.
-        data_dir (string): Path to the dataset.
+        batch size
     """
     dataloaders = {}
     for split in splits:
@@ -133,8 +127,7 @@ def fetch_dataloaders_debug(splits, batch_size=1):
     """
     Args:
         splits (list): A list of strings containing train/val/test.
-        var_str (string): A variable in log.
-        data_dir (string): Path to the dataset.
+        batch size
     """
     dataloaders = {}
     for split in splits:

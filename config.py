@@ -30,7 +30,6 @@ DIC_STNB_CONF = {
 DIC_VGP_CONF = {
     'embedding_dim' : 8,
     'vocab_size' : 26706, ## TODO adhoc
-    # vocab_size : 1800,
     'hidden_dim' : 2,
     'num_layers' : 2,
     'output_dim' : 2,
